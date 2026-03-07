@@ -1,0 +1,3 @@
+node_modules/stripe/types/Charges.d.ts:1512:          type Network = 'base' | 'ethereum' | 'polygon' | 'solana';
+node_modules/stripe/types/PaymentAttemptRecords.d.ts:1281:          type Network = 'base' | 'ethereum' | 'polygon' | 'solana';
+node_modules/stripe/types/PaymentRecords.d.ts:1281:          type Network = 'base' | 'ethereum' | 'polygon' | 'solana';

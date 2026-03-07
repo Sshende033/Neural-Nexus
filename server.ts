@@ -9,6 +9,7 @@ import * as XLSX from "xlsx";
 import { GoogleGenAI } from "@google/genai";
 
 const db = new Database("registrations.db");
+db.pragma('journal_mode = WAL');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Initialize database
@@ -90,7 +91,8 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT,
     amount TEXT,
-    description TEXT
+    description TEXT,
+    competition_id TEXT
   );
 
   CREATE TABLE IF NOT EXISTS settings (
@@ -121,6 +123,7 @@ try { db.prepare("ALTER TABLE contacts ADD COLUMN name TEXT").run(); } catch (e)
 try { db.prepare("ALTER TABLE contacts ADD COLUMN role TEXT").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE contacts ADD COLUMN phone TEXT").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE contacts ADD COLUMN email TEXT").run(); } catch (e) {}
+try { db.prepare("ALTER TABLE prize_pools ADD COLUMN competition_id TEXT").run(); } catch (e) {}
 
 // Initialize default venue if not exists
 const checkVenue = db.prepare("SELECT * FROM settings WHERE key = 'venue_name'").get();
@@ -476,12 +479,12 @@ User Question: ${message}`;
 
   app.post("/api/admin/prize_pools", (req, res) => {
     try {
-      const { title, amount, description } = req.body;
+      const { title, amount, description, competition_id } = req.body;
       const stmt = db.prepare(`
-        INSERT INTO prize_pools (title, amount, description)
-        VALUES (?, ?, ?)
+        INSERT INTO prize_pools (title, amount, description, competition_id)
+        VALUES (?, ?, ?, ?)
       `);
-      const result = stmt.run(title, amount, description);
+      const result = stmt.run(title, amount, description, competition_id);
       res.json({ success: true, id: result.lastInsertRowid });
     } catch (error) {
       res.status(500).json({ error: "Failed to add prize pool" });
@@ -499,9 +502,9 @@ User Question: ${message}`;
 
   app.put("/api/admin/prize_pools/:id", (req, res) => {
     try {
-      const { title, amount, description } = req.body;
-      db.prepare("UPDATE prize_pools SET title = ?, amount = ?, description = ? WHERE id = ?")
-        .run(title, amount, description, req.params.id);
+      const { title, amount, description, competition_id } = req.body;
+      db.prepare("UPDATE prize_pools SET title = ?, amount = ?, description = ?, competition_id = ? WHERE id = ?")
+        .run(title, amount, description, competition_id, req.params.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update prize pool" });
@@ -656,11 +659,11 @@ async function autoApprovePayment(registrationId: number, filePath: string, comp
               
               Criteria for approval:
               1) The screenshot MUST show a payment of exactly ${expectedAmount} INR.
-              2) If a Transaction ID is provided, verify if it matches the transaction ID or UTR number visible in the screenshot.
+              2) The Transaction ID (${transactionId}) MUST exactly match the transaction ID or UTR number visible in the screenshot. If they do not match, the payment MUST be rejected.
               
-              Analyze the image carefully. Look for the amount paid, the status (Success/Completed), and any QR code details if visible.
-              Respond with ONLY "APPROVED" if the criteria are met and the payment is successful.
-              Respond with ONLY "REJECTED" if the amount is incorrect, the payment failed, or it's not a valid payment screenshot.` 
+              Analyze the image carefully. Look for the amount paid, the status (Success/Completed), and the transaction ID/UTR.
+              Respond with ONLY "APPROVED" if the criteria are met, the payment is successful, AND the transaction ID matches exactly.
+              Respond with ONLY "REJECTED" if the amount is incorrect, the transaction ID does not match, the payment failed, or it's not a valid payment screenshot.` 
             }
           ]
         }
